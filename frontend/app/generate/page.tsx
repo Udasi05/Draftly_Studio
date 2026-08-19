@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
-import { KeyboardEvent, useEffect, useState } from 'react';
-import { useSession, signOut } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import DocTypeSelector from '@/components/DocTypeSelector';
-import PromptBox from '@/components/PromptBox';
-import FormatSelector from '@/components/FormatSelector';
-import GenerateButton from '@/components/GenerateButton';
-import DownloadCard from '@/components/DownloadCard';
-import { generateDocument } from '@/lib/apiClient';
-import type { DocTypeValue, ExportFormat } from '@/types/document';
+import { KeyboardEvent, useEffect, useState } from "react";
+import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import DocTypeSelector from "@/components/DocTypeSelector";
+import PromptBox from "@/components/PromptBox";
+import FormatSelector from "@/components/FormatSelector";
+import GenerateButton from "@/components/GenerateButton";
+import DownloadCard from "@/components/DownloadCard";
+import { generateDocument } from "@/lib/apiClient";
+import type { DocTypeValue, ExportFormat } from "@/types/document";
 
 type AxiosErrorLike = {
   response?: {
@@ -19,104 +19,113 @@ type AxiosErrorLike = {
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === "object" && value !== null;
 }
 
-const DYNAMIC_FIELDS: Record<DocTypeValue, { name: string; placeholder: string }[]> = {
+const DYNAMIC_FIELDS: Record<
+  DocTypeValue,
+  { name: string; placeholder: string }[]
+> = {
   meeting_minutes: [
-    { name: 'Date & Time', placeholder: 'e.g., Oct 12, 10:00 AM' },
-    { name: 'Location', placeholder: 'e.g., Conference Room B or Zoom' },
-    { name: 'Attendees', placeholder: 'e.g., Alice, Bob, Charlie' },
+    { name: "Date & Time", placeholder: "e.g., Oct 12, 10:00 AM" },
+    { name: "Location", placeholder: "e.g., Conference Room B or Zoom" },
+    { name: "Attendees", placeholder: "e.g., Alice, Bob, Charlie" },
   ],
   assignment: [
-    { name: 'Subject', placeholder: 'e.g., Computer Science' },
-    { name: 'Topic', placeholder: 'e.g., Data Structures' },
-    { name: 'Class/Grade', placeholder: 'e.g., CS101 or 12th Grade' },
+    { name: "Subject", placeholder: "e.g., Computer Science" },
+    { name: "Topic", placeholder: "e.g., Data Structures" },
+    { name: "Class/Grade", placeholder: "e.g., CS101 or 12th Grade" },
   ],
   lab_experiment: [
-    { name: 'Experiment Name', placeholder: 'e.g., Titration Analysis' },
-    { name: 'Objective', placeholder: 'e.g., Determine concentration of HCl' },
-    { name: 'Materials Used', placeholder: 'e.g., Burette, Pipette, Indicator' },
+    { name: "Experiment Name", placeholder: "e.g., Titration Analysis" },
+    { name: "Objective", placeholder: "e.g., Determine concentration of HCl" },
+    {
+      name: "Materials Used",
+      placeholder: "e.g., Burette, Pipette, Indicator",
+    },
   ],
   srs: [
-    { name: 'Project Name', placeholder: 'e.g., Draftly Web App' },
-    { name: 'Target Audience', placeholder: 'e.g., Students and Professionals' },
-    { name: 'Main Features', placeholder: 'e.g., Auth, PDF Export, AI Gen' },
+    { name: "Project Name", placeholder: "e.g., Draftly Web App" },
+    {
+      name: "Target Audience",
+      placeholder: "e.g., Students and Professionals",
+    },
+    { name: "Main Features", placeholder: "e.g., Auth, PDF Export, AI Gen" },
   ],
   project_report: [
-    { name: 'Project Title', placeholder: 'e.g., E-Commerce Platform' },
-    { name: 'Team Members', placeholder: 'e.g., John Doe, Jane Smith' },
-    { name: 'Tech Stack', placeholder: 'e.g., Next.js, Node.js, MongoDB' },
+    { name: "Project Title", placeholder: "e.g., E-Commerce Platform" },
+    { name: "Team Members", placeholder: "e.g., John Doe, Jane Smith" },
+    { name: "Tech Stack", placeholder: "e.g., Next.js, Node.js, MongoDB" },
   ],
   resume: [
-    { name: 'Full Name', placeholder: 'e.g., Alex Johnson' },
-    { name: 'Target Role', placeholder: 'e.g., Senior Frontend Engineer' },
-    { name: 'Experience Level', placeholder: 'e.g., 5 Years' },
+    { name: "Full Name", placeholder: "e.g., Alex Johnson" },
+    { name: "Target Role", placeholder: "e.g., Senior Frontend Engineer" },
+    { name: "Experience Level", placeholder: "e.g., 5 Years" },
   ],
   cover_letter: [
-    { name: 'Applicant Name', placeholder: 'e.g., Alex Johnson' },
-    { name: 'Target Company', placeholder: 'e.g., Google or Startup Inc' },
-    { name: 'Job Role', placeholder: 'e.g., Product Manager' },
+    { name: "Applicant Name", placeholder: "e.g., Alex Johnson" },
+    { name: "Target Company", placeholder: "e.g., Google or Startup Inc" },
+    { name: "Job Role", placeholder: "e.g., Product Manager" },
   ],
   general: [
-    { name: 'Target Audience', placeholder: 'e.g., General Public, Experts' },
-    { name: 'Document Purpose', placeholder: 'e.g., Informative, Persuasive' },
+    { name: "Target Audience", placeholder: "e.g., General Public, Experts" },
+    { name: "Document Purpose", placeholder: "e.g., Informative, Persuasive" },
   ],
 };
 
 const HELPER_TIPS = [
   {
-    title: 'Add the target audience and tone.',
-    body: 'Tell Draftly who will read this — recruiter, professor, board — so the language matches.',
+    title: "Add the target audience and tone.",
+    body: "Tell Draftly who will read this — recruiter, professor, board — so the language matches.",
   },
   {
-    title: 'Mention sections, tables, or lists if you need them.',
+    title: "Mention sections, tables, or lists if you need them.",
     body: 'A short hint like "include a 4-row table" is enough to shape the structure.',
   },
   {
-    title: 'Describe any constraints like length or style.',
+    title: "Describe any constraints like length or style.",
     body: 'Specify "2 pages", "ATS-friendly", or "executive summary" to keep output focused.',
   },
 ];
 
 const WORKFLOW_STEPS = [
-  'Choose a document category.',
-  'Write the brief in natural language.',
-  'Export the generated file immediately.',
+  "Choose a document category.",
+  "Write the brief in natural language.",
+  "Export the generated file immediately.",
 ];
 
 const OUTPUT_TILES = [
-  { label: 'Tone', value: 'Confident' },
-  { label: 'Layout', value: 'Editorial' },
-  { label: 'Motion', value: 'Subtle' },
-  { label: 'Theme', value: 'Dark slate' },
+  { label: "Tone", value: "Confident" },
+  { label: "Layout", value: "Editorial" },
+  { label: "Motion", value: "Subtle" },
+  { label: "Theme", value: "Dark slate" },
 ];
 
-const SHELL = 'mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8';
+const SHELL = "mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8";
 
 export default function GeneratePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  const [docType, setDocType] = useState<DocTypeValue>('general');
-  const [prompt, setPrompt] = useState('');
-  const [format, setFormat] = useState<ExportFormat>('docx');
+  const [docType, setDocType] = useState<DocTypeValue>("general");
+  const [prompt, setPrompt] = useState("");
+  const [format, setFormat] = useState<ExportFormat>("docx");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(null);
-  const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({});
+  const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(
+    null,
+  );
+  const [dynamicValues, setDynamicValues] = useState<Record<string, string>>(
+    {},
+  );
 
   useEffect(() => {
-    setDynamicValues({});
-  }, [docType]);
-
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/');
+    if (status === "unauthenticated") {
+      router.push("/");
     }
   }, [status, router]);
 
-  if (status === 'loading') {
+  if (status === "loading") {
     return (
       <div className="min-h-[calc(100vh-64px)] flex items-center justify-center">
         <div className="text-center">
@@ -130,6 +139,11 @@ export default function GeneratePage() {
   if (!session) return null;
 
   const isValid = prompt.trim().length >= 10 && prompt.length <= 2000;
+
+  const handleDocTypeChange = (nextDocType: DocTypeValue) => {
+    setDocType(nextDocType);
+    setDynamicValues({});
+  };
 
   const handleGenerate = async () => {
     if (!isValid || loading) return;
@@ -149,19 +163,23 @@ export default function GeneratePage() {
         .filter(Boolean);
 
       if (contextLines.length > 0) {
-        finalPrompt = `Context Information:\n${contextLines.join('\n')}\n\nTask:\n${prompt}`;
+        finalPrompt = `Context Information:\n${contextLines.join("\n")}\n\nTask:\n${prompt}`;
       }
     }
 
     try {
-      const response = await generateDocument({ prompt: finalPrompt, docType, format });
+      const response = await generateDocument({
+        prompt: finalPrompt,
+        docType,
+        format,
+      });
       setResult(response);
     } catch (err: unknown) {
       const axiosErr = err as AxiosErrorLike;
       const respStatus = axiosErr.response?.status;
       let data = axiosErr.response?.data;
 
-      if (data instanceof Blob && data.type === 'application/json') {
+      if (data instanceof Blob && data.type === "application/json") {
         try {
           data = JSON.parse(await data.text());
         } catch {
@@ -171,12 +189,12 @@ export default function GeneratePage() {
 
       if (respStatus === 429) {
         setError(
-          'You have hit the rate limit. Please wait a minute before generating again.'
+          "You have hit the rate limit. Please wait a minute before generating again.",
         );
       } else if (respStatus === 401) {
-        setError('Your session has expired. Please sign in again.');
+        setError("Your session has expired. Please sign in again.");
         setTimeout(() => {
-          signOut({ callbackUrl: '/' });
+          signOut({ callbackUrl: "/" });
         }, 3000);
       } else if (isRecord(data)) {
         const details = data.details;
@@ -186,32 +204,32 @@ export default function GeneratePage() {
             .map((item) => {
               if (!isRecord(item)) return null;
               const field =
-                typeof item.field === 'string' ? item.field : 'field';
+                typeof item.field === "string" ? item.field : "field";
               const message =
-                typeof item.message === 'string'
+                typeof item.message === "string"
                   ? item.message
-                  : 'Invalid value';
+                  : "Invalid value";
               return `${field}: ${message}`;
             })
             .filter((item): item is string => Boolean(item))
-            .join(', ');
+            .join(", ");
 
           setError(
             validationErrors
               ? `Validation error: ${validationErrors}`
-              : 'Validation error: please review your prompt.'
+              : "Validation error: please review your prompt.",
           );
         } else {
           const message =
-            typeof data.message === 'string' ? data.message : undefined;
+            typeof data.message === "string" ? data.message : undefined;
           const apiError =
-            typeof data.error === 'string' ? data.error : undefined;
+            typeof data.error === "string" ? data.error : undefined;
           setError(
-            message || apiError || 'Something went wrong. Please try again.'
+            message || apiError || "Something went wrong. Please try again.",
           );
         }
       } else {
-        setError('Failed to generate document. Please try again.');
+        setError("Failed to generate document. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -221,17 +239,12 @@ export default function GeneratePage() {
   const handleReset = () => {
     setResult(null);
     setError(null);
-    setPrompt('');
+    setPrompt("");
     setDynamicValues({});
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (
-      e.key === 'Enter' &&
-      (e.ctrlKey || e.metaKey) &&
-      isValid &&
-      !loading
-    ) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && isValid && !loading) {
       handleGenerate();
     }
   };
@@ -248,7 +261,9 @@ export default function GeneratePage() {
         <div className="absolute bottom-[-8%] left-[18%] h-[360px] w-[360px] rounded-full bg-cyan-100/40 blur-[120px]" />
       </div>
 
-      <div className={`relative ${SHELL} flex flex-col gap-6 py-8 sm:py-10 lg:py-12`}>
+      <div
+        className={`relative ${SHELL} flex flex-col gap-6 py-8 sm:py-10 lg:py-12`}
+      >
         {/* ─── Header row ─── */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
@@ -257,12 +272,13 @@ export default function GeneratePage() {
               Shape a brief into a polished document workspace.
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-              Draftly keeps the generation loop tight: pick a document type, describe
-              the outcome, and export a clean Word or PDF file when it is ready.
+              Draftly keeps the generation loop tight: pick a document type,
+              describe the outcome, and export a clean Word or PDF file when it
+              is ready.
               {session?.user?.name ? (
                 <span className="text-slate-800">
-                  {' '}
-                  Welcome back, {session.user.name.split(' ')[0]}.
+                  {" "}
+                  Welcome back, {session.user.name.split(" ")[0]}.
                 </span>
               ) : null}
             </p>
@@ -270,9 +286,9 @@ export default function GeneratePage() {
 
           <div className="grid grid-cols-3 gap-3 sm:min-w-[360px]">
             {[
-              { label: 'Private', value: 'Google-authenticated' },
-              { label: 'Fast', value: 'Local AI' },
-              { label: 'Export', value: 'DOCX / PDF' },
+              { label: "Private", value: "Google-authenticated" },
+              { label: "Fast", value: "Local AI" },
+              { label: "Export", value: "DOCX / PDF" },
             ].map((stat) => (
               <div
                 key={stat.label}
@@ -302,36 +318,48 @@ export default function GeneratePage() {
                 </span>
               </div>
 
-              <DocTypeSelector value={docType} onChange={setDocType} />
+              <DocTypeSelector value={docType} onChange={handleDocTypeChange} />
 
               {/* Dynamic Context Fields */}
-              {DYNAMIC_FIELDS[docType] && DYNAMIC_FIELDS[docType].length > 0 && (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="col-span-full">
-                    <p className="text-sm font-semibold text-slate-900">Document Context (Optional)</p>
-                    <p className="text-xs text-slate-500 mt-1 mb-2">Providing this info significantly improves AI accuracy.</p>
-                  </div>
-                  {DYNAMIC_FIELDS[docType].map((field) => (
-                    <div key={field.name}>
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        {field.name}
-                      </label>
-                      <input
-                        type="text"
-                        placeholder={field.placeholder}
-                        value={dynamicValues[field.name] || ''}
-                        onChange={(e) =>
-                          setDynamicValues((prev) => ({ ...prev, [field.name]: e.target.value }))
-                        }
-                        disabled={loading}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-300 focus:outline-none focus:ring-4 focus:ring-sky-500/10 disabled:opacity-50"
-                      />
+              {DYNAMIC_FIELDS[docType] &&
+                DYNAMIC_FIELDS[docType].length > 0 && (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="col-span-full">
+                      <p className="text-sm font-semibold text-slate-900">
+                        Document Context (Optional)
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1 mb-2">
+                        Providing this info significantly improves AI accuracy.
+                      </p>
                     </div>
-                  ))}
-                </div>
-              )}
+                    {DYNAMIC_FIELDS[docType].map((field) => (
+                      <div key={field.name}>
+                        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          {field.name}
+                        </label>
+                        <input
+                          type="text"
+                          placeholder={field.placeholder}
+                          value={dynamicValues[field.name] || ""}
+                          onChange={(e) =>
+                            setDynamicValues((prev) => ({
+                              ...prev,
+                              [field.name]: e.target.value,
+                            }))
+                          }
+                          disabled={loading}
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-300 focus:outline-none focus:ring-4 focus:ring-sky-500/10 disabled:opacity-50"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-              <PromptBox value={prompt} onChange={setPrompt} disabled={loading} />
+              <PromptBox
+                value={prompt}
+                onChange={setPrompt}
+                disabled={loading}
+              />
               <FormatSelector value={format} onChange={setFormat} />
 
               {error && (
@@ -365,14 +393,14 @@ export default function GeneratePage() {
 
                 {isValid && !loading && (
                   <p className="text-center text-xs text-slate-500">
-                    Press{' '}
+                    Press{" "}
                     <kbd className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px]">
                       Ctrl
-                    </kbd>{' '}
-                    +{' '}
+                    </kbd>{" "}
+                    +{" "}
                     <kbd className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px]">
                       Enter
-                    </kbd>{' '}
+                    </kbd>{" "}
                     to generate.
                   </p>
                 )}
@@ -405,7 +433,9 @@ export default function GeneratePage() {
                   {tip.title}
                 </p>
               </div>
-              <p className="mt-3 text-sm leading-6 text-slate-600">{tip.body}</p>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                {tip.body}
+              </p>
             </div>
           ))}
 
@@ -414,8 +444,8 @@ export default function GeneratePage() {
               Shortcut
             </p>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              The result card appears in place so the generate-download loop stays
-              on one screen.
+              The result card appears in place so the generate-download loop
+              stays on one screen.
             </p>
           </div>
         </section>
@@ -456,8 +486,9 @@ export default function GeneratePage() {
               Designed to read like a product, not a form.
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Draftly keeps the interface calm and editorial, with enough structure
-              to feel like a serious workbench and enough motion to feel alive.
+              Draftly keeps the interface calm and editorial, with enough
+              structure to feel like a serious workbench and enough motion to
+              feel alive.
             </p>
 
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
