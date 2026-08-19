@@ -1,0 +1,30 @@
+{
+  "name": "draftly-backend",
+  "version": "1.0.0",
+  "description": "Draftly AI Document Generator — Express API",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": [
+    "ai",
+    "document",
+    "generator",
+    "claude"
+  ],
+  "author": "Anish Udasi",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "docx": "^9.5.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "google-auth-library": "^9.15.1",
+    "helmet": "^8.0.0",
+    "morgan": "^1.10.0",
+    "pdfmake": "^0.2.18",
+    "zod": "^3.24.2"
+  }
+}
