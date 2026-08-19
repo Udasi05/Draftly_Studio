@@ -43,15 +43,15 @@ File download (in-memory, no persistence)
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4 |
-| Backend | Node.js, Express 4 |
-| Authentication | Google OAuth via Auth.js (NextAuth v5) |
-| AI | Ollama (local LLM) |
-| Word export | [`docx`](https://www.npmjs.com/package/docx) |
-| PDF export | [`pdfmake`](https://www.npmjs.com/package/pdfmake) |
-| Validation | Zod |
+| Layer          | Technology                                                    |
+| -------------- | ------------------------------------------------------------- |
+| Frontend       | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4 |
+| Backend        | Node.js, Express 4                                            |
+| Authentication | Google OAuth via Auth.js (NextAuth v5)                        |
+| AI             | Ollama (local LLM)                                            |
+| Word export    | [`docx`](https://www.npmjs.com/package/docx)                  |
+| PDF export     | [`pdfmake`](https://www.npmjs.com/package/pdfmake)            |
+| Validation     | Zod                                                           |
 
 ---
 
@@ -59,10 +59,10 @@ File download (in-memory, no persistence)
 
 Before running Draftly locally, ensure you have:
 
-| Requirement | Notes |
-|-------------|-------|
-| **Node.js 18+** | Required for frontend and backend |
-| **Ollama** | [Install Ollama](https://ollama.com/download) and pull a model (default: `llama3`) |
+| Requirement                  | Notes                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| **Node.js 18+**              | Required for frontend and backend                                                          |
+| **Ollama**                   | [Install Ollama](https://ollama.com/download) and pull a model (default: `llama3`)         |
 | **Google OAuth credentials** | Create an OAuth 2.0 Client ID in [Google Cloud Console](https://console.cloud.google.com/) |
 
 ### Ollama setup
@@ -95,11 +95,10 @@ Ollama listens on `http://127.0.0.1:11434` by default.
 ```bash
 git clone <repository-url>
 cd Draftly
-```
 
+## Draftly
 ### 2. Install dependencies
 
-```bash
 # Backend
 cd backend
 npm install
@@ -159,41 +158,41 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### Backend (`backend/.env`)
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `PORT` | No | `5000` | API server port |
-| `NODE_ENV` | No | `development` | Runtime environment |
-| `OLLAMA_MODEL` | No | `llama3` | Ollama model name |
-| `OLLAMA_HOST` | No | `http://127.0.0.1:11434` | Ollama API base URL |
-| `GOOGLE_CLIENT_ID` | **Yes** | — | Google OAuth client ID (must match frontend) |
-| `CORS_ORIGINS` | No | `http://localhost:3000` | Comma-separated allowed origins |
-| `RATE_LIMIT_WINDOW_MS` | No | `60000` | Rate limit window (ms) |
-| `RATE_LIMIT_MAX_REQUESTS` | No | `100` | Global requests per window |
-| `GENERATE_RATE_LIMIT_MAX` | No | `10` | Generation requests per user per window |
+| Variable                  | Required | Default                  | Description                                  |
+| ------------------------- | -------- | ------------------------ | -------------------------------------------- |
+| `PORT`                    | No       | `5000`                   | API server port                              |
+| `NODE_ENV`                | No       | `development`            | Runtime environment                          |
+| `OLLAMA_MODEL`            | No       | `llama3`                 | Ollama model name                            |
+| `OLLAMA_HOST`             | No       | `http://127.0.0.1:11434` | Ollama API base URL                          |
+| `GOOGLE_CLIENT_ID`        | **Yes**  | —                        | Google OAuth client ID (must match frontend) |
+| `CORS_ORIGINS`            | No       | `http://localhost:3000`  | Comma-separated allowed origins              |
+| `RATE_LIMIT_WINDOW_MS`    | No       | `60000`                  | Rate limit window (ms)                       |
+| `RATE_LIMIT_MAX_REQUESTS` | No       | `100`                    | Global requests per window                   |
+| `GENERATE_RATE_LIMIT_MAX` | No       | `10`                     | Generation requests per user per window      |
 
 ### Frontend (`frontend/.env.local`)
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GOOGLE_CLIENT_ID` | **Yes** | Google OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | **Yes** | Google OAuth client secret |
-| `AUTH_SECRET` | **Yes** | Auth.js session encryption secret |
-| `NEXT_PUBLIC_API_URL` | **Yes** | Backend API URL (e.g. `http://localhost:5000`) |
+| Variable               | Required | Description                                    |
+| ---------------------- | -------- | ---------------------------------------------- |
+| `GOOGLE_CLIENT_ID`     | **Yes**  | Google OAuth client ID                         |
+| `GOOGLE_CLIENT_SECRET` | **Yes**  | Google OAuth client secret                     |
+| `AUTH_SECRET`          | **Yes**  | Auth.js session encryption secret              |
+| `NEXT_PUBLIC_API_URL`  | **Yes**  | Backend API URL (e.g. `http://localhost:5000`) |
 
 ---
 
 ## Document Types
 
-| Category | Type | Key |
-|----------|------|-----|
-| Academic | Assignment | `assignment` |
-| Academic | Lab Experiment Report | `lab_experiment` |
-| Academic | Software Requirements Specification | `srs` |
-| Academic | Project Report | `project_report` |
-| Professional | Resume / CV | `resume` |
-| Professional | Cover Letter | `cover_letter` |
-| Professional | Meeting Minutes | `meeting_minutes` |
-| General | General Purpose Document | `general` |
+| Category     | Type                                | Key               |
+| ------------ | ----------------------------------- | ----------------- |
+| Academic     | Assignment                          | `assignment`      |
+| Academic     | Lab Experiment Report               | `lab_experiment`  |
+| Academic     | Software Requirements Specification | `srs`             |
+| Academic     | Project Report                      | `project_report`  |
+| Professional | Resume / CV                         | `resume`          |
+| Professional | Cover Letter                        | `cover_letter`    |
+| Professional | Meeting Minutes                     | `meeting_minutes` |
+| General      | General Purpose Document            | `general`         |
 
 ---
 
@@ -235,11 +234,11 @@ Content-Type: application/json
 }
 ```
 
-| Field | Type | Constraints |
-|-------|------|-------------|
-| `prompt` | string | 10–2000 characters |
+| Field     | Type   | Constraints                         |
+| --------- | ------ | ----------------------------------- |
+| `prompt`  | string | 10–2000 characters                  |
 | `docType` | string | One of the document type keys above |
-| `format` | string | `"docx"` or `"pdf"` |
+| `format`  | string | `"docx"` or `"pdf"`                 |
 
 **Response:** Binary file download with appropriate `Content-Type` and `Content-Disposition` headers.
 
@@ -297,11 +296,11 @@ cd frontend && npm run lint
 
 **Default ports**
 
-| Service | Port |
-|---------|------|
-| Frontend | 3000 |
-| Backend API | 5000 |
-| Ollama | 11434 |
+| Service     | Port  |
+| ----------- | ----- |
+| Frontend    | 3000  |
+| Backend API | 5000  |
+| Ollama      | 11434 |
 
 ---
 
