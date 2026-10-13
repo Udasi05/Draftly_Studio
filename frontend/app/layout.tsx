@@ -23,6 +23,11 @@ export const metadata: Metadata = {
     title: 'Draftly Studio - Clean AI Document Platform',
     description: 'Generate polished documents instantly with AI in a light workspace.',
     type: 'website',
+    images: ['/logo.png'],
+  },
+  icons: {
+    icon: '/logo.png',
+    apple: '/logo.png',
   },
 };
 

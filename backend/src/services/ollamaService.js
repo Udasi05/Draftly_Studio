@@ -1,4 +1,5 @@
 const { buildSystemPrompt } = require('../prompts/systemPrompt');
+const { normalizeDocumentJSON } = require('./documentNormalizer');
 const { env } = require('../config/env');
 
 // Maximum length for user prompts (characters)
@@ -22,6 +23,34 @@ function sanitisePrompt(userPrompt) {
 }
 
 /**
+ * Extract clean JSON substring from an LLM response string.
+ */
+function extractJSONString(rawContent) {
+  if (!rawContent || typeof rawContent !== 'string') return '';
+
+  let text = rawContent.trim();
+
+  // Remove thinking/reasoning blocks (e.g. <think>...</think>)
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  // If wrapped in markdown code fence, extract interior
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenceMatch && fenceMatch[1]) {
+    text = fenceMatch[1].trim();
+  }
+
+  // If there are still non-JSON prefixes or suffixes, find outermost { and }
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    text = text.substring(firstBrace, lastBrace + 1);
+  }
+
+  return text;
+}
+
+/**
  * Generate structured document JSON from a user's natural language prompt using local Ollama.
  *
  * @param {string} userPrompt - The user's document description
@@ -32,7 +61,6 @@ async function generateDocumentJSON(userPrompt, docType) {
   const sanitisedPrompt = sanitisePrompt(userPrompt);
   const systemPrompt = buildSystemPrompt(docType);
 
-  // We use the validated environment config
   const model = env.OLLAMA_MODEL;
   const ollamaHost = env.OLLAMA_HOST;
 
@@ -50,27 +78,31 @@ async function generateDocumentJSON(userPrompt, docType) {
         messages: [
           {
             role: 'system',
-            content: systemPrompt
+            content: systemPrompt,
           },
           {
             role: 'user',
-            content: `Document Type: ${docType}\n\nUser Request: ${sanitisedPrompt}`
-          }
+            content: `Document Type: ${docType}\n\nUser Request: ${sanitisedPrompt}`,
+          },
         ],
         options: {
-          temperature: 0.3, // Lower temperature for more structured, predictable JSON output
-        }
-      })
+          temperature: 0.3,
+          num_ctx: 8192,
+          num_predict: 4096,
+        },
+      }),
     });
   } catch (error) {
-    console.error('[Ollama] Connection error:', error.message, error.cause);
-    throw Object.assign(new Error('Could not connect to local AI. Is Ollama running?'), { statusCode: 503 });
+    console.error('[Ollama] Connection error:', error.message);
+    throw Object.assign(new Error('Could not connect to local AI. Is Ollama running on http://127.0.0.1:11434?'), {
+      statusCode: 503,
+    });
   }
 
   if (!response.ok) {
     const errorText = await response.text();
     console.error(`[Ollama] API error (${response.status}):`, errorText);
-    throw Object.assign(new Error('Local AI generation failed.'), { statusCode: 502 });
+    throw Object.assign(new Error(`Local AI generation failed (${response.status}).`), { statusCode: 502 });
   }
 
   const data = await response.json();
@@ -80,32 +112,26 @@ async function generateDocumentJSON(userPrompt, docType) {
     throw Object.assign(new Error('AI returned no text content'), { statusCode: 502 });
   }
 
-  let raw = rawContent.trim();
+  const jsonCandidate = extractJSONString(rawContent);
 
-  // Clean potential markdown code fences just in case
-  if (raw.startsWith('```')) {
-    raw = raw.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
-  }
-
-  // Parse and validate JSON
-  let document;
+  let rawDocument;
   try {
-    document = JSON.parse(raw);
+    rawDocument = JSON.parse(jsonCandidate);
   } catch (parseError) {
-    console.error('[Ollama] Failed to parse response as JSON:', raw.substring(0, 200));
+    console.error('[Ollama] Failed to parse response as JSON. Excerpt:', rawContent.substring(0, 300));
     throw Object.assign(new Error('AI returned invalid document structure. Please try again.'), {
       statusCode: 502,
     });
   }
 
-  // Basic structural validation
-  if (!document.title || !Array.isArray(document.sections) || document.sections.length === 0) {
-    throw Object.assign(new Error('AI returned incomplete document. Please try again.'), {
-      statusCode: 502,
-    });
+  // Normalize document to ensure robust schema compliance
+  try {
+    const normalized = normalizeDocumentJSON(rawDocument);
+    return normalized;
+  } catch (normError) {
+    console.error('[Ollama] Document normalization error:', normError.message);
+    throw Object.assign(new Error('AI document schema could not be processed.'), { statusCode: 502 });
   }
-
-  return document;
 }
 
-module.exports = { generateDocumentJSON };
+module.exports = { generateDocumentJSON, extractJSONString };

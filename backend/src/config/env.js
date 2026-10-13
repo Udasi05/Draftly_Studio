@@ -8,6 +8,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 // ─── Schema: every env var is validated at startup ───
 const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
+  HOST: z.string().default('0.0.0.0'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
   // AI Provider (Using local Ollama)
@@ -21,7 +22,7 @@ const envSchema = z.object({
 
   CORS_ORIGINS: z
     .string()
-    .default('http://localhost:3000')
+    .default('http://localhost:3000,http://127.0.0.1:3000')
     .transform((val) => val.split(',').map((s) => s.trim())),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),

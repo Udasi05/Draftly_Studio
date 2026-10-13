@@ -1,6 +1,12 @@
-# Draftly
+<p align="center">
+  <img src="./logo.png" alt="Draftly Logo" width="140" style="border-radius: 20px;" />
+</p>
 
-**AI-powered document generator** — describe what you need in plain English and download a professionally formatted Word or PDF document in seconds.
+<h1 align="center">Draftly Studio</h1>
+
+<p align="center">
+  <b>AI-powered document generator</b> — describe what you need in plain English and download a professionally formatted Word or PDF document in seconds.
+</p>
 
 Draftly is a full-stack web app with a Next.js frontend and an Express API. Users sign in with Google, choose a document type, write a brief, and receive an export generated locally via [Ollama](https://ollama.com/). Documents are built in memory and streamed to the browser; nothing is stored on the server.
 
@@ -200,7 +206,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### `GET /api/health`
 
-Health check. No authentication required.
+Comprehensive health check reporting service uptime and AI Engine (Ollama) connectivity. No authentication required.
 
 **Response:**
 
@@ -208,14 +214,22 @@ Health check. No authentication required.
 {
   "status": "ok",
   "service": "Draftly API",
-  "timestamp": "2026-07-19T00:00:00.000Z",
-  "uptime": 42
+  "timestamp": "2026-10-13T14:55:27.377Z",
+  "uptime": 42,
+  "aiEngine": {
+    "provider": "ollama",
+    "status": "connected",
+    "configuredModel": "llama3.1",
+    "host": "http://127.0.0.1:11434",
+    "availableModels": ["llama3.1:latest"],
+    "error": null
+  }
 }
 ```
 
 ### `POST /api/generate`
 
-Generate and download a document. Requires a valid Google ID token.
+Generate a document via local AI. Requires a valid Google ID token.
 
 **Headers:**
 
@@ -234,15 +248,32 @@ Content-Type: application/json
 }
 ```
 
-| Field     | Type   | Constraints                         |
-| --------- | ------ | ----------------------------------- |
-| `prompt`  | string | 10–2000 characters                  |
-| `docType` | string | One of the document type keys above |
-| `format`  | string | `"docx"` or `"pdf"`                 |
+| Field     | Type   | Constraints                                     |
+| --------- | ------ | ----------------------------------------------- |
+| `prompt`  | string | 10–2000 characters                              |
+| `docType` | string | One of the document type keys above             |
+| `format`  | string | `"docx"`, `"pdf"`, or `"json"` (for Studio preview) |
 
-**Response:** Binary file download with appropriate `Content-Type` and `Content-Disposition` headers.
+**Response:**
+- If `format` is `"docx"` or `"pdf"`: Binary file download stream with `Content-Disposition`, `X-Document-Title`, and `X-Document-Stats` headers.
+- If `format` is `"json"`: Structured document JSON for interactive in-browser preview and caching.
 
 **Rate limit:** 10 requests per minute per authenticated user (configurable).
+
+### `POST /api/generate/compile`
+
+Instantly compile an existing document JSON into DOCX or PDF without re-running Ollama (<50ms latency). Requires Google ID token.
+
+**Request body:**
+
+```json
+{
+  "document": { ... },
+  "format": "pdf"
+}
+```
+
+**Response:** Binary file download with appropriate headers.
 
 ---
 
@@ -286,6 +317,9 @@ Draftly/
 ```bash
 # Backend — watch mode
 cd backend && npm run dev
+
+# Backend — automated test suite
+cd backend && npm test
 
 # Frontend — Next.js dev server
 cd frontend && npm run dev

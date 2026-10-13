@@ -8,6 +8,7 @@ function errorHandler(err, req, res, _next) {
   // Log full error server-side
   console.error(`[Error] ${req.method} ${req.path}:`, {
     message: err.message,
+    statusCode: err.statusCode || err.status || 500,
     stack: env.NODE_ENV === 'development' ? err.stack : undefined,
     userId: req.user?.email || 'anonymous',
   });
@@ -15,9 +16,13 @@ function errorHandler(err, req, res, _next) {
   // Determine status code
   const statusCode = err.statusCode || err.status || 500;
 
-  // Build response — never leak internals in production
+  // Build response
+  // Operational errors (502, 503, 4xx) carry helpful user-facing messages
+  const isOperational = statusCode < 500 || statusCode === 502 || statusCode === 503;
+
   const response = {
-    error: statusCode >= 500 ? 'Internal server error' : err.message || 'Something went wrong',
+    error: isOperational ? err.message : 'Internal server error',
+    message: err.message || 'Something went wrong',
   };
 
   if (env.NODE_ENV === 'development') {

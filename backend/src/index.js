@@ -27,15 +27,24 @@ app.use(
       // Allow requests with no origin (server-to-server, Postman, etc.)
       if (!origin) return callback(null, true);
 
+      // In development, allow any localhost or 127.0.0.1 port
+      if (
+        env.NODE_ENV === 'development' &&
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+      ) {
+        return callback(null, true);
+      }
+
       if (env.CORS_ORIGINS.includes(origin)) {
         return callback(null, true);
       }
 
       console.warn(`[CORS] Blocked request from origin: ${origin}`);
-      return callback(new Error('Not allowed by CORS'));
+      return callback(null, false);
     },
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['Content-Disposition', 'X-Document-Title', 'X-Document-Stats'],
     credentials: true,
     maxAge: 86400, // Pre-flight cache: 24 hours
   })
@@ -85,8 +94,10 @@ app.use(errorHandler);
 
 // ─── Start server ───
 const PORT = env.PORT;
-app.listen(PORT, () => {
-  console.log(`\n🚀 Draftly API running on http://localhost:${PORT}`);
+const HOST = env.HOST || '0.0.0.0';
+app.listen(PORT, HOST, () => {
+  console.log(`\n Draftly API running on http://${HOST}:${PORT}`);
+  console.log(`   Local URL: http://localhost:${PORT}`);
   console.log(`   Environment: ${env.NODE_ENV}`);
   console.log(`   CORS origins: ${env.CORS_ORIGINS.join(', ')}`);
   console.log(`   Rate limit: ${env.RATE_LIMIT_MAX_REQUESTS} req/min (global), ${env.GENERATE_RATE_LIMIT_MAX} req/min (generate)\n`);

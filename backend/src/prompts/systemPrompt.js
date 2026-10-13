@@ -8,7 +8,7 @@ The JSON MUST follow this exact schema:
   "metadata": {
     "font": "Times New Roman",
     "fontSize": 12,
-    "lineSpacing": 1.5
+    "lineSpacing": 1.0
   },
   "sections": [
     {
@@ -51,8 +51,11 @@ Rules for the JSON:
 - For "bullets" and "numbered" types, "content" is an array of strings
 - For "table" type, include "headers" (string[]) and "rows" (string[][])
 - For "heading_only" type, no "content" field is needed
-- Generate at least 4 sections for any document
-- All text must be professional, well-structured, and appropriate for the document type
+- Generate at least 6 to 9 richly developed sections for academic or technical documents (assignments, reports, SRS), and 5 to 7 sections for professional documents.
+- Paragraphs must be substantive, informative, and exhaustive (minimum 120-200 words each). Do NOT write brief 1-sentence summaries.
+- Use concrete technical terms, real-world examples, methodologies, tools, and metrics throughout.
+- Tables should have at least 3-5 rows of detailed data.
+- All text must be professional, highly structured, and appropriate for the document type.
 `;
 
 const SECURITY_CLAUSE = `
@@ -69,15 +72,18 @@ IMPORTANT SECURITY INSTRUCTIONS:
 `;
 
 const DOC_TYPE_GUIDANCE = {
-  assignment: `You are an elite academic professor. Generate a high-quality, deeply researched university assignment. 
-Strictly follow this structure: 
+  assignment: `You are an elite university professor. Generate an exhaustive, deeply researched academic assignment (comprehensive university level).
+Strictly follow this comprehensive structure:
 1. Title (Academic and formal)
-2. Introduction (Context, problem statement, and thesis)
-3. Main Content (Divided into logical H2 sub-sections analyzing the user's specific topic)
-4. Case Studies / Examples (Real-world applications of the topic)
-5. Conclusion (Summary and final academic thought)
-6. References (Generate 3-5 realistic academic citations in APA format).
-Integrate the user's prompt deeply into the arguments and maintain a formal, scholarly tone.`,
+2. Abstract / Overview (Thorough problem statement, thesis, and context)
+3. Theoretical Foundations (In-depth analysis of core concepts, terminology, and underlying principles)
+4. Core Methodologies & Technical Architecture (Step-by-step breakdown of protocols, tools, frameworks, and workflows)
+5. Comparative Analysis / Evaluation Matrix (A detailed data table comparing tools, methods, or approaches with headers and 3-5 rows)
+6. Real-World Case Studies & Practical Applications (Detailed practical scenarios demonstrating real-world execution)
+7. Challenges, Security Considerations & Limitations (Critical academic discussion)
+8. Conclusion & Future Scope (Synthesis of findings and prospective advances)
+9. Academic References (3-5 realistic academic citations in APA format).
+Every section must have multiple rich paragraphs or extensive bullet points with realistic technical depth. Avoid generic or superficial answers.`,
 
   lab_experiment: `You are a strict laboratory supervisor. Generate a precise, highly structured laboratory experiment report.
 Strictly follow this structure:

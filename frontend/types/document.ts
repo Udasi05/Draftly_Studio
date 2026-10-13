@@ -46,10 +46,15 @@ export const EXPORT_FORMATS: ExportFormatOption[] = [
 export interface GenerateRequest {
   prompt: string;
   docType: DocTypeValue;
+  format: ExportFormat | 'json';
+}
+
+export interface CompileRequest {
+  document: DocumentJSON;
   format: ExportFormat;
 }
 
-// ─── Claude JSON Output Schema (for reference) ───
+// ─── Document Schema ───
 export interface DocumentSection {
   heading: string;
   level: 1 | 2 | 3;
@@ -67,4 +72,36 @@ export interface DocumentJSON {
     lineSpacing: number;
   };
   sections: DocumentSection[];
+  stats?: {
+    sectionsCount: number;
+    wordCount: number;
+  };
+}
+
+export interface GenerateJsonResponse {
+  document: DocumentJSON;
+  docType: DocTypeValue;
+}
+
+export interface AiEngineHealth {
+  status: 'ok' | 'error';
+  service: string;
+  uptime: number;
+  aiEngine?: {
+    provider: string;
+    status: 'connected' | 'disconnected' | 'error';
+    configuredModel: string;
+    host: string;
+    availableModels: string[];
+    error?: string | null;
+  };
+}
+
+export interface DocumentHistoryItem {
+  id: string;
+  title: string;
+  docType: DocTypeValue;
+  createdAt: string;
+  document: DocumentJSON;
+  promptSnippet: string;
 }

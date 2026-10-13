@@ -3,6 +3,7 @@
 import { useSession, signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { DOC_TYPES } from '@/types/document';
 import { DocTypeIcon } from '@/components/icons';
 
@@ -115,7 +116,8 @@ export default function LandingPage() {
           <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
             {/* Left: copy */}
             <div className="max-w-2xl">
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 text-sm text-slate-700 animate-slide-up">
+              <div className="inline-flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-sm font-medium text-slate-700 shadow-sm animate-slide-up">
+                <Image src="/logo.png" alt="Draftly" width={20} height={20} className="h-5 w-5 object-contain" />
                 Draftly Studio — AI document platform
               </div>
 
@@ -393,21 +395,14 @@ export default function LandingPage() {
             {/* Brand */}
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-900 text-white">
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <path d="M8 12h8M8 16h8" />
-                  </svg>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <Image
+                    src="/logo.png"
+                    alt="Draftly Logo"
+                    width={36}
+                    height={36}
+                    className="h-8 w-8 object-contain"
+                  />
                 </div>
                 <p className="font-display text-base font-semibold tracking-tight text-slate-900">
                   Draftly Studio

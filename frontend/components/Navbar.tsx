@@ -59,12 +59,15 @@ export default function Navbar() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
           <Link href="/" className="group flex items-center gap-3" id="nav-logo">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-amber-50 shadow-sm transition-transform group-hover:-translate-y-0.5">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0f172a" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-                <path d="M8 12h8M8 16h8" />
-              </svg>
+            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-transform group-hover:-translate-y-0.5">
+              <Image
+                src="/logo.png"
+                alt="Draftly Logo"
+                width={36}
+                height={36}
+                className="h-8 w-8 object-contain"
+                priority
+              />
             </div>
             <div>
               <p className="font-display text-lg font-semibold tracking-tight text-slate-900">Draftly Studio</p>

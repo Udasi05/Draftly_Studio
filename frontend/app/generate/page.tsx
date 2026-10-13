@@ -3,13 +3,23 @@
 import { KeyboardEvent, useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import DocTypeSelector from "@/components/DocTypeSelector";
 import PromptBox from "@/components/PromptBox";
 import FormatSelector from "@/components/FormatSelector";
 import GenerateButton from "@/components/GenerateButton";
 import DownloadCard from "@/components/DownloadCard";
-import { generateDocument } from "@/lib/apiClient";
-import type { DocTypeValue, ExportFormat } from "@/types/document";
+import DocumentPreview from "@/components/DocumentPreview";
+import GenerationProgress from "@/components/GenerationProgress";
+import AiStatusBadge from "@/components/AiStatusBadge";
+import DocumentHistory from "@/components/DocumentHistory";
+import { generateDocument, generateDocumentJSON, compileDocument } from "@/lib/apiClient";
+import type {
+  DocTypeValue,
+  ExportFormat,
+  DocumentJSON,
+  DocumentHistoryItem,
+} from "@/types/document";
 
 type AxiosErrorLike = {
   response?: {
@@ -73,35 +83,43 @@ const DYNAMIC_FIELDS: Record<
   ],
 };
 
+const TONE_OPTIONS = ["Professional", "Academic", "Executive", "Creative", "Concise"];
+const FONT_OPTIONS = [
+  { value: "Times New Roman", label: "Times New Roman (Classic Serif)" },
+  { value: "Helvetica", label: "Helvetica / Arial (Modern Clean)" },
+  { value: "Georgia", label: "Georgia (Editorial Serif)" },
+];
+
 const HELPER_TIPS = [
   {
-    title: "Add the target audience and tone.",
+    title: "Add target audience and tone.",
     body: "Tell Draftly who will read this — recruiter, professor, board — so the language matches.",
   },
   {
-    title: "Mention sections, tables, or lists if you need them.",
-    body: 'A short hint like "include a 4-row table" is enough to shape the structure.',
+    title: "Mention tables or lists.",
+    body: 'A short hint like "include a 4-row action items table" shapes the structure automatically.',
   },
   {
-    title: "Describe any constraints like length or style.",
+    title: "Describe constraints.",
     body: 'Specify "2 pages", "ATS-friendly", or "executive summary" to keep output focused.',
   },
 ];
 
 const WORKFLOW_STEPS = [
-  "Choose a document category.",
-  "Write the brief in natural language.",
-  "Export the generated file immediately.",
+  "Choose a document category & tone.",
+  "Describe your brief in plain English.",
+  "Preview live and export Word or PDF in seconds.",
 ];
 
 const OUTPUT_TILES = [
-  { label: "Tone", value: "Confident" },
-  { label: "Layout", value: "Editorial" },
-  { label: "Motion", value: "Subtle" },
-  { label: "Theme", value: "Dark slate" },
+  { label: "AI Engine", value: "Local Llama 3.1" },
+  { label: "Privacy", value: "In-memory / Zero leak" },
+  { label: "Speed", value: "<50ms re-export" },
+  { label: "Dual Format", value: "DOCX + PDF" },
 ];
 
 const SHELL = "mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8";
+const STORAGE_KEY = "draftly_recent_drafts";
 
 export default function GeneratePage() {
   const { data: session, status } = useSession();
@@ -110,20 +128,59 @@ export default function GeneratePage() {
   const [docType, setDocType] = useState<DocTypeValue>("general");
   const [prompt, setPrompt] = useState("");
   const [format, setFormat] = useState<ExportFormat>("docx");
+  const [tone, setTone] = useState("Professional");
+  const [font, setFont] = useState("Times New Roman");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(
-    null,
-  );
-  const [dynamicValues, setDynamicValues] = useState<Record<string, string>>(
-    {},
-  );
 
+  // Results
+  const [generatedDoc, setGeneratedDoc] = useState<DocumentJSON | null>(null);
+  const [result, setResult] = useState<{ blob: Blob; filename: string } | null>(null);
+  const [history, setHistory] = useState<DocumentHistoryItem[]>([]);
+
+  const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({});
+
+  // Auth redirect
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
     }
   }, [status, router]);
+
+  // Load history from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setHistory(parsed.slice(0, 8));
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const saveToHistory = (item: DocumentHistoryItem) => {
+    try {
+      const nextHistory = [item, ...history.filter((h) => h.id !== item.id)].slice(0, 8);
+      setHistory(nextHistory);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextHistory));
+    } catch {
+      // ignore
+    }
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  };
 
   if (status === "loading") {
     return (
@@ -151,35 +208,68 @@ export default function GeneratePage() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setGeneratedDoc(null);
 
     let finalPrompt = prompt;
     const currentFields = DYNAMIC_FIELDS[docType];
-    if (currentFields && currentFields.length > 0) {
-      const contextLines = currentFields
-        .map((f) => {
-          const val = dynamicValues[f.name];
-          return val ? `${f.name}: ${val}` : null;
-        })
-        .filter(Boolean);
+    const contextLines: string[] = [];
 
-      if (contextLines.length > 0) {
-        finalPrompt = `Context Information:\n${contextLines.join("\n")}\n\nTask:\n${prompt}`;
-      }
+    if (currentFields && currentFields.length > 0) {
+      currentFields.forEach((f) => {
+        const val = dynamicValues[f.name];
+        if (val) contextLines.push(`${f.name}: ${val}`);
+      });
+    }
+
+    if (tone) {
+      contextLines.push(`Desired Tone: ${tone}`);
+    }
+
+    if (contextLines.length > 0) {
+      finalPrompt = `Context & Style:\n${contextLines.join("\n")}\n\nTask:\n${prompt}`;
     }
 
     try {
-      const response = await generateDocument({
+      // 1. Generate document JSON for live preview & structured caching
+      const jsonRes = await generateDocumentJSON({
         prompt: finalPrompt,
         docType,
-        format,
       });
-      setResult(response);
+
+      const doc = jsonRes.document;
+      if (font) {
+        doc.metadata = { ...doc.metadata, font };
+      }
+      setGeneratedDoc(doc);
+
+      // Save to session history
+      const historyItem: DocumentHistoryItem = {
+        id: `${Date.now()}`,
+        title: doc.title,
+        docType,
+        createdAt: new Date().toISOString(),
+        document: doc,
+        promptSnippet: prompt.substring(0, 60),
+      };
+      saveToHistory(historyItem);
+
+      // 2. Also compile requested format for immediate download card
+      try {
+        const fileRes = await compileDocument({
+          document: doc,
+          format,
+        });
+        setResult(fileRes);
+      } catch (compileErr) {
+        console.warn("[Generate] Immediate binary compilation postponed to preview:", compileErr);
+      }
     } catch (err: unknown) {
       const axiosErr = err as AxiosErrorLike;
       const respStatus = axiosErr.response?.status;
       let data = axiosErr.response?.data;
 
-      if (data instanceof Blob && data.type === "application/json") {
+      // Robust Blob error parsing (handling application/json; charset=utf-8)
+      if (data instanceof Blob && (data.type.includes("json") || data.type === "")) {
         try {
           data = JSON.parse(await data.text());
         } catch {
@@ -188,9 +278,7 @@ export default function GeneratePage() {
       }
 
       if (respStatus === 429) {
-        setError(
-          "You have hit the rate limit. Please wait a minute before generating again.",
-        );
+        setError("You have hit the rate limit. Please wait a minute before generating again.");
       } else if (respStatus === 401) {
         setError("Your session has expired. Please sign in again.");
         setTimeout(() => {
@@ -203,12 +291,8 @@ export default function GeneratePage() {
           const validationErrors = details
             .map((item) => {
               if (!isRecord(item)) return null;
-              const field =
-                typeof item.field === "string" ? item.field : "field";
-              const message =
-                typeof item.message === "string"
-                  ? item.message
-                  : "Invalid value";
+              const field = typeof item.field === "string" ? item.field : "field";
+              const message = typeof item.message === "string" ? item.message : "Invalid value";
               return `${field}: ${message}`;
             })
             .filter((item): item is string => Boolean(item))
@@ -217,19 +301,15 @@ export default function GeneratePage() {
           setError(
             validationErrors
               ? `Validation error: ${validationErrors}`
-              : "Validation error: please review your prompt.",
+              : "Validation error: please review your prompt."
           );
         } else {
-          const message =
-            typeof data.message === "string" ? data.message : undefined;
-          const apiError =
-            typeof data.error === "string" ? data.error : undefined;
-          setError(
-            message || apiError || "Something went wrong. Please try again.",
-          );
+          const message = typeof data.message === "string" ? data.message : undefined;
+          const apiError = typeof data.error === "string" ? data.error : undefined;
+          setError(message || apiError || "Something went wrong. Please try again.");
         }
       } else {
-        setError("Failed to generate document. Please try again.");
+        setError("Failed to generate document. Is Ollama running on your machine?");
       }
     } finally {
       setLoading(false);
@@ -238,9 +318,16 @@ export default function GeneratePage() {
 
   const handleReset = () => {
     setResult(null);
+    setGeneratedDoc(null);
     setError(null);
     setPrompt("");
     setDynamicValues({});
+  };
+
+  const handleSelectHistoryItem = (item: DocumentHistoryItem) => {
+    setGeneratedDoc(item.document);
+    setDocType(item.docType);
+    setResult(null);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -254,31 +341,32 @@ export default function GeneratePage() {
       className="relative min-h-[calc(100vh-64px)] overflow-hidden"
       onKeyDown={handleKeyDown}
     >
-      {/* Ambient glows */}
+      {/* Ambient background glows */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute left-[-8%] top-[-10%] h-[420px] w-[420px] rounded-full bg-sky-200/35 blur-[120px]" />
         <div className="absolute right-[-10%] top-[8%] h-[380px] w-[380px] rounded-full bg-amber-100/70 blur-[140px]" />
         <div className="absolute bottom-[-8%] left-[18%] h-[360px] w-[360px] rounded-full bg-cyan-100/40 blur-[120px]" />
       </div>
 
-      <div
-        className={`relative ${SHELL} flex flex-col gap-6 py-8 sm:py-10 lg:py-12`}
-      >
+      <div className={`relative ${SHELL} flex flex-col gap-6 py-8 sm:py-10 lg:py-12`}>
         {/* ─── Header row ─── */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="section-kicker">Studio</p>
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
+                <Image src="/logo.png" alt="Draftly" width={28} height={28} className="h-6 w-6 object-contain" />
+              </div>
+              <p className="section-kicker">Studio Workspace</p>
+              <AiStatusBadge />
+            </div>
             <h1 className="section-title mt-3 text-3xl font-semibold tracking-tight text-slate-900 text-balance sm:text-4xl lg:text-5xl">
-              Shape a brief into a polished document workspace.
+              Turn a brief into a professional document.
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-              Draftly keeps the generation loop tight: pick a document type,
-              describe the outcome, and export a clean Word or PDF file when it
-              is ready.
+              Draftly generates clean Word and PDF exports in memory via local AI.
               {session?.user?.name ? (
                 <span className="text-slate-800">
-                  {" "}
-                  Welcome back, {session.user.name.split(" ")[0]}.
+                  {" "}Welcome back, {session.user.name.split(" ")[0]}.
                 </span>
               ) : null}
             </p>
@@ -286,81 +374,122 @@ export default function GeneratePage() {
 
           <div className="grid grid-cols-3 gap-3 sm:min-w-[360px]">
             {[
-              { label: "Private", value: "Google-authenticated" },
-              { label: "Fast", value: "Local AI" },
-              { label: "Export", value: "DOCX / PDF" },
+              { label: "Private", value: "In-memory AI" },
+              { label: "Inference", value: "Local Llama 3.1" },
+              { label: "Exports", value: "DOCX & PDF" },
             ].map((stat) => (
-              <div
-                key={stat.label}
-                className="panel rounded-2xl px-4 py-3 text-center"
-              >
-                <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">
-                  {stat.label}
-                </p>
-                <p className="mt-1 text-sm font-medium text-slate-900">
-                  {stat.value}
-                </p>
+              <div key={stat.label} className="panel rounded-2xl px-4 py-3 text-center">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">{stat.label}</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">{stat.value}</p>
               </div>
             ))}
           </div>
         </div>
 
-        {/* ─── Generation Queue — full width ─── */}
+        {/* ─── Document History Drawer (if drafts exist) ─── */}
+        {history.length > 0 && !generatedDoc && (
+          <DocumentHistory
+            items={history}
+            onSelect={handleSelectHistoryItem}
+            onClear={clearHistory}
+          />
+        )}
+
+        {/* ─── Generation Studio Section ─── */}
         <section className="panel-strong rounded-[28px] p-5 sm:p-7 lg:p-9">
           <div className="surface-grid rounded-[24px] border border-white/5 bg-white/[0.015] p-4 sm:p-6 lg:p-8">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="glass-chip rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-slate-500">
-                  Generation queue
-                </span>
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] text-emerald-700">
-                  Ready when you are
-                </span>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="glass-chip rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-slate-500">
+                    Generation studio
+                  </span>
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] text-emerald-700">
+                    Ready
+                  </span>
+                </div>
+
+                {/* Tone selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">Tone:</span>
+                  <select
+                    value={tone}
+                    onChange={(e) => setTone(e.target.value)}
+                    disabled={loading}
+                    className="rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-800 focus:outline-none focus:border-sky-300"
+                  >
+                    {TONE_OPTIONS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <DocTypeSelector value={docType} onChange={handleDocTypeChange} />
 
               {/* Dynamic Context Fields */}
-              {DYNAMIC_FIELDS[docType] &&
-                DYNAMIC_FIELDS[docType].length > 0 && (
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="col-span-full">
-                      <p className="text-sm font-semibold text-slate-900">
-                        Document Context (Optional)
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1 mb-2">
-                        Providing this info significantly improves AI accuracy.
-                      </p>
-                    </div>
-                    {DYNAMIC_FIELDS[docType].map((field) => (
-                      <div key={field.name}>
-                        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                          {field.name}
-                        </label>
-                        <input
-                          type="text"
-                          placeholder={field.placeholder}
-                          value={dynamicValues[field.name] || ""}
-                          onChange={(e) =>
-                            setDynamicValues((prev) => ({
-                              ...prev,
-                              [field.name]: e.target.value,
-                            }))
-                          }
-                          disabled={loading}
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-300 focus:outline-none focus:ring-4 focus:ring-sky-500/10 disabled:opacity-50"
-                        />
-                      </div>
-                    ))}
+              {DYNAMIC_FIELDS[docType] && DYNAMIC_FIELDS[docType].length > 0 && (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="col-span-full">
+                    <p className="text-sm font-semibold text-slate-900">
+                      Document Context (Optional)
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1 mb-2">
+                      Providing specific details helps the model shape realistic sections.
+                    </p>
                   </div>
-                )}
+                  {DYNAMIC_FIELDS[docType].map((field) => (
+                    <div key={field.name}>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        {field.name}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder={field.placeholder}
+                        value={dynamicValues[field.name] || ""}
+                        onChange={(e) =>
+                          setDynamicValues((prev) => ({
+                            ...prev,
+                            [field.name]: e.target.value,
+                          }))
+                        }
+                        disabled={loading}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-300 focus:outline-none focus:ring-4 focus:ring-sky-500/10 disabled:opacity-50"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
 
-              <PromptBox
-                value={prompt}
-                onChange={setPrompt}
-                disabled={loading}
-              />
-              <FormatSelector value={format} onChange={setFormat} />
+              <PromptBox value={prompt} onChange={setPrompt} disabled={loading} />
+
+              {/* Format & Font Controls */}
+              <div className="grid gap-4 sm:grid-cols-[1fr_auto] items-end">
+                <FormatSelector value={format} onChange={setFormat} />
+
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Typography
+                  </label>
+                  <select
+                    value={font}
+                    onChange={(e) => setFont(e.target.value)}
+                    disabled={loading}
+                    className="w-full rounded-[22px] border border-slate-200 bg-white px-3.5 py-3 text-xs text-slate-800 shadow-sm focus:outline-none focus:border-sky-300"
+                  >
+                    {FONT_OPTIONS.map((f) => (
+                      <option key={f.value} value={f.value}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Real-time Progress Bar */}
+              <GenerationProgress loading={loading} docType={docType} />
 
               {error && (
                 <div
@@ -384,29 +513,32 @@ export default function GeneratePage() {
                 </div>
               )}
 
-              <div className="mx-auto w-full max-w-xl space-y-3">
-                <GenerateButton
-                  onClick={handleGenerate}
-                  loading={loading}
-                  disabled={!isValid}
-                />
+              {!loading && (
+                <div className="mx-auto w-full max-w-xl space-y-3">
+                  <GenerateButton
+                    onClick={handleGenerate}
+                    loading={loading}
+                    disabled={!isValid}
+                  />
 
-                {isValid && !loading && (
-                  <p className="text-center text-xs text-slate-500">
-                    Press{" "}
-                    <kbd className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px]">
-                      Ctrl
-                    </kbd>{" "}
-                    +{" "}
-                    <kbd className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px]">
-                      Enter
-                    </kbd>{" "}
-                    to generate.
-                  </p>
-                )}
-              </div>
+                  {isValid && (
+                    <p className="text-center text-xs text-slate-500">
+                      Press{" "}
+                      <kbd className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px]">
+                        Ctrl
+                      </kbd>{" "}
+                      +{" "}
+                      <kbd className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px]">
+                        Enter
+                      </kbd>{" "}
+                      to generate.
+                    </p>
+                  )}
+                </div>
+              )}
 
-              {result && (
+              {/* Immediate Download Card (fallback / quick download) */}
+              {result && !generatedDoc && (
                 <DownloadCard
                   blob={result.blob}
                   filename={result.filename}
@@ -414,50 +546,51 @@ export default function GeneratePage() {
                   onReset={handleReset}
                 />
               )}
+
+              {/* ─── Live Interactive Document Studio Preview ─── */}
+              {generatedDoc && (
+                <DocumentPreview
+                  document={generatedDoc}
+                  docType={docType}
+                  onReset={handleReset}
+                />
+              )}
             </div>
           </div>
         </section>
 
-        {/* ─── Assistant notes — 4-up horizontal helper strip ─── */}
+        {/* ─── Assistant notes — helper strip ─── */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {HELPER_TIPS.map((tip, i) => (
-            <div
-              key={tip.title}
-              className="panel rounded-2xl border border-slate-200 bg-white p-5"
-            >
+            <div key={tip.title} className="panel rounded-2xl border border-slate-200 bg-white p-5">
               <div className="flex items-center gap-3">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-50 text-[11px] font-semibold text-sky-700">
                   0{i + 1}
                 </span>
-                <p className="text-sm font-semibold text-slate-900">
-                  {tip.title}
-                </p>
+                <p className="text-sm font-semibold text-slate-900">{tip.title}</p>
               </div>
-              <p className="mt-3 text-sm leading-6 text-slate-600">
-                {tip.body}
-              </p>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{tip.body}</p>
             </div>
           ))}
 
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-700">
-              Shortcut
+              Instant Re-Export
             </p>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              The result card appears in place so the generate-download loop
-              stays on one screen.
+              Once generated, switch between Word and PDF in &lt;50ms without waiting for local AI to re-run.
             </p>
           </div>
         </section>
 
-        {/* ─── Workflow + Output quality — 2-col panel row ─── */}
+        {/* ─── Workflow & Quality panels ─── */}
         <section className="grid gap-4 lg:grid-cols-2">
           <div className="panel rounded-[28px] p-5 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="section-kicker">Workflow</p>
+                <p className="section-kicker">Architecture</p>
                 <h2 className="section-title mt-2 text-xl font-semibold text-slate-900">
-                  The Draftly loop
+                  The Draftly pipeline
                 </h2>
               </div>
               <span className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
@@ -481,25 +614,18 @@ export default function GeneratePage() {
           </div>
 
           <div className="panel rounded-[28px] p-5 sm:p-6">
-            <p className="section-kicker">Output quality</p>
+            <p className="section-kicker">Production standard</p>
             <h2 className="section-title mt-2 text-xl font-semibold text-slate-900">
-              Designed to read like a product, not a form.
+              Engineered for enterprise reliability.
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Draftly keeps the interface calm and editorial, with enough
-              structure to feel like a serious workbench and enough motion to
-              feel alive.
+              Hardened with Zod validation, defensive schema normalization, and in-memory streams.
             </p>
 
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
               {OUTPUT_TILES.map((item) => (
-                <div
-                  key={item.label}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                >
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                    {item.label}
-                  </p>
+                <div key={item.label} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
                   <p className="mt-1 text-sm text-slate-900">{item.value}</p>
                 </div>
               ))}

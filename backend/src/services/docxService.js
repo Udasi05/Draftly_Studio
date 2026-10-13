@@ -10,9 +10,9 @@ const {
   TableCell,
   WidthType,
   BorderStyle,
-  ShadingType,
   convertInchesToTwip,
 } = require('docx');
+const { normalizeDocumentJSON } = require('./documentNormalizer');
 
 // ─── Heading level mapping ───
 const HEADING_MAP = {
@@ -24,41 +24,45 @@ const HEADING_MAP = {
 /**
  * Build a styled table from headers and rows.
  */
-function buildTable(headers, rows) {
+function buildTable(headers = [], rows = [], fontFamily = 'Times New Roman') {
+  const safeHeaders = Array.isArray(headers) && headers.length > 0 ? headers : ['Item', 'Details'];
+  const colCount = safeHeaders.length;
+  const colWidthPct = Math.max(5, Math.floor(100 / colCount));
+
   // Header row
   const headerRow = new TableRow({
     tableHeader: true,
-    children: headers.map(
+    children: safeHeaders.map(
       (h) =>
         new TableCell({
           children: [
             new Paragraph({
-              children: [new TextRun({ text: String(h), bold: true, color: '000000', font: 'Times New Roman', size: 24 })],
+              children: [new TextRun({ text: String(h), bold: true, color: '000000', font: fontFamily, size: 22 })],
               alignment: AlignmentType.CENTER,
             }),
           ],
-          width: { size: Math.floor(100 / headers.length), type: WidthType.PERCENTAGE },
+          width: { size: colWidthPct, type: WidthType.PERCENTAGE },
         })
     ),
   });
 
   // Data rows
-  const dataRows = (rows || []).map(
-    (row) =>
-      new TableRow({
-        children: row.map(
-          (cell) =>
-            new TableCell({
-              children: [
-                new Paragraph({
-                  children: [new TextRun({ text: String(cell), font: 'Times New Roman', size: 24, color: '000000' })],
-                }),
-              ],
-              width: { size: Math.floor(100 / headers.length), type: WidthType.PERCENTAGE },
-            })
-        ),
-      })
-  );
+  const dataRows = (rows || []).map((row) => {
+    const cells = Array.isArray(row) ? row : [row];
+    return new TableRow({
+      children: safeHeaders.map((_, idx) => {
+        const cellValue = cells[idx] !== undefined ? String(cells[idx]) : '';
+        return new TableCell({
+          children: [
+            new Paragraph({
+              children: [new TextRun({ text: cellValue, font: fontFamily, size: 22, color: '000000' })],
+            }),
+          ],
+          width: { size: colWidthPct, type: WidthType.PERCENTAGE },
+        });
+      }),
+    });
+  });
 
   return new Table({
     rows: [headerRow, ...dataRows],
@@ -75,13 +79,14 @@ function buildTable(headers, rows) {
 }
 
 /**
- * Convert Claude's document JSON into a .docx Buffer.
+ * Convert structured document JSON into a .docx Buffer.
  *
- * @param {object} docJSON - Claude's structured document output
+ * @param {object} docJSON - Structured document output
  * @returns {Promise<Buffer>} The generated .docx file as a Buffer
  */
 async function generateDocx(docJSON) {
-  const { title, metadata = {}, sections = [] } = docJSON;
+  const normalized = normalizeDocumentJSON(docJSON);
+  const { title, metadata = {}, sections = [] } = normalized;
 
   const fontFamily = metadata.font || 'Times New Roman';
   const fontSize = (metadata.fontSize || 12) * 2; // docx uses half-points
@@ -89,7 +94,7 @@ async function generateDocx(docJSON) {
 
   const children = [];
 
-  // ─── Title ───
+  // ─── Document Title ───
   children.push(
     new Paragraph({
       children: [
@@ -97,13 +102,13 @@ async function generateDocx(docJSON) {
           text: title,
           bold: true,
           font: fontFamily,
-          size: 40, // 20pt
+          size: 38, // 19pt
           color: '000000',
         }),
       ],
       heading: HeadingLevel.TITLE,
       alignment: AlignmentType.CENTER,
-      spacing: { after: 400 },
+      spacing: { after: 360 },
     })
   );
 
@@ -120,32 +125,35 @@ async function generateDocx(docJSON) {
               text: heading,
               bold: true,
               font: fontFamily,
-              size: level === 1 ? 32 : level === 2 ? 26 : 24,
+              size: level === 1 ? 30 : level === 2 ? 26 : 24,
               color: '000000',
             }),
           ],
           heading: HEADING_MAP[level] || HeadingLevel.HEADING_2,
-          spacing: { before: 300, after: 120 },
+          spacing: { before: 260, after: 120 },
         })
       );
     }
 
     if (type === 'heading_only') continue;
 
-    // Paragraph
-    if (type === 'paragraph' && typeof content === 'string') {
-      children.push(
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: content,
-              font: fontFamily,
-              size: fontSize,
-            }),
-          ],
-          spacing: { after: 200, line: lineSpacing },
-        })
-      );
+    // Paragraph (handles multi-paragraph strings)
+    if (type === 'paragraph' && content) {
+      const paragraphs = String(content).split(/\n\n+/);
+      for (const p of paragraphs) {
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: p.trim(),
+                font: fontFamily,
+                size: fontSize,
+              }),
+            ],
+            spacing: { after: 180, line: lineSpacing },
+          })
+        );
+      }
     }
 
     // Bullet list
@@ -175,9 +183,9 @@ async function generateDocx(docJSON) {
     }
 
     // Table
-    if (type === 'table' && Array.isArray(headers)) {
-      children.push(buildTable(headers, rows));
-      children.push(new Paragraph({ spacing: { after: 200 } })); // spacer after table
+    if (type === 'table') {
+      children.push(buildTable(headers, rows, fontFamily));
+      children.push(new Paragraph({ spacing: { after: 200 } })); // spacer
     }
   }
 
@@ -219,8 +227,7 @@ async function generateDocx(docJSON) {
     ],
   });
 
-  const buffer = await Packer.toBuffer(doc);
-  return buffer;
+  return await Packer.toBuffer(doc);
 }
 
 module.exports = { generateDocx };
